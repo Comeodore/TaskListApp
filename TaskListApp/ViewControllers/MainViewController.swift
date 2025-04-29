@@ -9,9 +9,15 @@ import UIKit
 
 class MainViewController: UIViewController {
     
+    enum AlertType {
+        case addTask
+        case editTask
+    }
+    
     // MARK: - Properties
+    public var storageManager: StorageManager = StorageManager.shared
     private let tableView = UITableView()
-    private var tasks: [String] = ["Задача 1", "Задача 2", "Задача 3"]
+    lazy private var tasks: [String] = storageManager.fetchTasks().map({$0.title!})
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
@@ -21,7 +27,7 @@ class MainViewController: UIViewController {
     
     // MARK: - UI Setup
     private func setupUI() {
-        title = "Задачи"
+        title = "Task"
         view.backgroundColor = .systemBackground
         
         setupNavigationBar()
@@ -32,7 +38,7 @@ class MainViewController: UIViewController {
         navigationItem.rightBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .add,
             target: self,
-            action: #selector(addNewTask)
+            action: #selector(addTaskAlert)
         )
     }
     
@@ -52,34 +58,47 @@ class MainViewController: UIViewController {
         tableView.dataSource = self
     }
     
-    // MARK: - Actions
-    @objc private func addNewTask() {
+    private func showAlertController(type: AlertType, editTaskIndex: Int? = nil) {
+        let actionName = type == .addTask ? "Add" : "Edit"
+        
         let alertController = UIAlertController(
-            title: "Новая задача",
-            message: "Введите название задачи",
+            title: "\(actionName) task",
+            message: "Type a task name",
             preferredStyle: .alert
         )
         
         alertController.addTextField { textField in
-            textField.placeholder = "Название задачи"
+            textField.placeholder = "Task name"
         }
         
-        let addAction = UIAlertAction(title: "Добавить", style: .default) { [weak self] _ in
+        let mainAction = UIAlertAction(title: actionName, style: .default) { [weak self] _ in
             guard let self = self,
                   let textField = alertController.textFields?.first,
                   let taskTitle = textField.text, !taskTitle.isEmpty else { return }
             
-            tasks.append(taskTitle)
+            switch type {
+                case .addTask:
+                    tasks.append(taskTitle)
+                    storageManager.createTask(title: taskTitle)
+                case .editTask:
+                    guard let editTaskIndex else { return }
+                    tasks[editTaskIndex] = taskTitle
+                    storageManager.editTask(taskTitle: taskTitle, index: editTaskIndex)
+            }
             tableView.reloadData()
-            print(tasks)
         }
         
-        let cancelAction = UIAlertAction(title: "Отмена", style: .destructive)
+        let cancelAction = UIAlertAction(title: "Cancel", style: .destructive)
         
-        alertController.addAction(addAction)
+        alertController.addAction(mainAction)
         alertController.addAction(cancelAction)
         
         present(alertController, animated: true)
+    }
+    
+    // MARK: - Add action
+    @objc private func addTaskAlert() {
+        showAlertController(type: .addTask)
     }
 }
 
@@ -104,19 +123,28 @@ extension MainViewController: UITableViewDataSource {
 extension MainViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
+        showAlertController(type: .editTask, editTaskIndex: indexPath.row)
     }
     
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-        let deleteAction = UIContextualAction(style: .destructive, title: "Удалить") { [weak self] (_, _, completionHandler) in
+        let deleteAction = UIContextualAction(style: .destructive, title: "Delete") { [weak self] (_, _, completionHandler) in
             guard let self = self else { return }
             
             tasks.remove(at: indexPath.row)
             tableView.deleteRows(at: [indexPath], with: .automatic)
+            storageManager.deleteTask(indexPath.row)
             
             completionHandler(true)
         }
         
-        return UISwipeActionsConfiguration(actions: [deleteAction])
+        let editAction = UIContextualAction(style: .normal, title: "Edit") { [weak self] (_, _, completionHandler) in
+            guard let self = self else { return }
+            showAlertController(type: .editTask, editTaskIndex: indexPath.row)
+            
+            completionHandler(true)
+        }
+        
+        return UISwipeActionsConfiguration(actions: [deleteAction, editAction])
     }
 }
 
