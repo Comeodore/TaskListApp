@@ -8,8 +8,7 @@
 import RealmSwift
 
 final class StorageManager {
-    let shared = StorageManager()
-    
+    static let shared = StorageManager()
     private let realm: Realm
     
     private init() {
@@ -20,17 +19,40 @@ final class StorageManager {
         }
     }
     
-    func fetchData<T: RealmFetchable>(_ type: T.Type) -> Results<T> {
-        realm.objects(T.self)
+    func fetchTasks() -> Results<Task> {
+        realm.objects(Task.self)
     }
     
-    func save<T: Object>(_ object: T) {
-        write {
+    func addTask(_ taskTitle: String) {
+        addNewObject(Task(value: ["title": taskTitle]))
+    }
+    
+    func editTask(task: Task, newTitle: String? = nil, isCompleted: Bool? = nil) {
+        commit {
+            if let newTitle {
+                task.title = newTitle
+            }
+            if let isCompleted {
+                task.isCompleted = isCompleted
+            }
+        }
+    }
+    
+    func deleteTask(_ task: Task) {
+        commit {
+            realm.delete(task)
+        }
+    }
+    
+    // MARK: - Private funcs
+    
+    private func addNewObject<T: Object>(_ object: T) {
+        commit {
             realm.add(object)
         }
     }
     
-    private func write(completion: () -> Void) {
+    private func commit(completion: () -> Void) {
         do {
             try realm.write {
                 completion()
